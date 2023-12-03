@@ -1,0 +1,5 @@
+ name: Debug
+  run: |
+    echo "DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}"
+    echo "DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}"
+    env
