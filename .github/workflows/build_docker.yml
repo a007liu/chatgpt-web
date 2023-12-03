@@ -23,7 +23,14 @@ jobs:
           echo "DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}"
           echo "DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}"
           env
-          
+        - name: Debug Secrets and Env
+          run: |
+          echo "Secrets:"
+          printenv | grep DOCKERHUB
+          echo "env:"
+          env
+
+      
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
