@@ -39,7 +39,7 @@ export default {
     twoFA: 'Two-step verification',
   },
   chat: {
-    newChatButton: 'New Chat',
+    newChatButton: '新对话',
     placeholder: 'Ask me anything...(Shift + Enter = line break, "/" to trigger prompts)',
     placeholderMobile: 'Ask me anything...',
     copy: 'Copy',

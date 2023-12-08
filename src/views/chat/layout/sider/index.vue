@@ -1,4 +1,4 @@
-<script setup lang='ts'>
+<script setup lang="ts">
 import type { CSSProperties } from 'vue'
 import { computed, ref, watch } from 'vue'
 import { NButton, NLayoutSider } from 'naive-ui'
@@ -18,79 +18,92 @@ const show = ref(false)
 const collapsed = computed(() => appStore.siderCollapsed)
 
 async function handleAdd() {
-  await chatStore.addHistory({ title: 'New Chat', uuid: Date.now(), isEdit: false, usingContext: true })
-  if (isMobile.value)
-    appStore.setSiderCollapsed(true)
+	await chatStore.addHistory({ title: '新对话', uuid: Date.now(), isEdit: false, usingContext: true })
+	if (isMobile.value)
+		appStore.setSiderCollapsed(true)
 }
 
 function handleUpdateCollapsed() {
-  appStore.setSiderCollapsed(!collapsed.value)
+	appStore.setSiderCollapsed(!collapsed.value)
 }
 
 const getMobileClass = computed<CSSProperties>(() => {
-  if (isMobile.value) {
-    return {
-      position: 'fixed',
-      zIndex: 50,
-    }
-  }
-  return {}
+	if (isMobile.value) {
+		return {
+			position: 'fixed',
+			zIndex: 50,
+		}
+	}
+	return {}
 })
 
 const mobileSafeArea = computed(() => {
-  if (isMobile.value) {
-    return {
-      paddingBottom: 'env(safe-area-inset-bottom)',
-    }
-  }
-  return {}
+	if (isMobile.value) {
+		return {
+			paddingBottom: 'env(safe-area-inset-bottom)',
+		}
+	}
+	return {}
 })
 
 watch(
-  isMobile,
-  (val) => {
-    appStore.setSiderCollapsed(val)
-  },
-  {
-    immediate: true,
-    flush: 'post',
-  },
+	isMobile,
+	(val) => {
+		appStore.setSiderCollapsed(val)
+	},
+	{
+		immediate: true,
+		flush: 'post',
+	},
 )
 </script>
 
 <template>
-  <NLayoutSider
-    :collapsed="collapsed"
-    :collapsed-width="0"
-    :width="260"
-    :show-trigger="isMobile ? false : 'arrow-circle'"
-    collapse-mode="transform"
-    position="absolute"
-    bordered
-    :style="getMobileClass"
-    @update-collapsed="handleUpdateCollapsed"
-  >
-    <div class="flex flex-col h-full" :style="mobileSafeArea">
-      <main class="flex flex-col flex-1 min-h-0">
-        <div class="p-4">
-          <NButton dashed block :disabled="!!authStore.session?.auth && !authStore.token" @click="handleAdd">
-            {{ $t('chat.newChatButton') }}
-          </NButton>
-        </div>
-        <div class="flex-1 min-h-0 pb-4 overflow-hidden">
-          <List />
-        </div>
-        <div class="p-4">
-          <NButton block @click="show = true">
-            {{ $t('store.siderButton') }}
-          </NButton>
-        </div>
-      </main>
-      <Footer />
-    </div>
-  </NLayoutSider>
-  <template v-if="isMobile">
-    <div v-show="!collapsed" class="fixed inset-0 z-40 bg-black/40" @click="handleUpdateCollapsed" />
-  </template>
-  <PromptStore v-model:visible="show" />
+	<NLayoutSider
+		class="operate-slider"
+		:collapsed="collapsed"
+		:collapsed-width="0"
+		:width="isMobile?'90%':260"
+		:show-trigger="isMobile ? false : 'arrow-circle'"
+		collapse-mode="transform"
+		position="absolute"
+		bordered
+		:style="getMobileClass"
+		@update-collapsed="handleUpdateCollapsed"
+	>
+		<div class="flex flex-col h-full" :style="mobileSafeArea">
+			<main class="flex flex-col flex-1 min-h-0">
+				<div class="p-4">
+					<NButton
+						type="primary"
+						size="large"
+						ghost
+						block
+						:disabled="!!authStore.session?.auth && !authStore.token"
+						@click="handleAdd">
+						{{ $t('chat.newChatButton') }}
+					</NButton>
+				</div>
+				<div class="flex-1 min-h-0 pb-4 overflow-hidden pt-4 border-t">
+					<List/>
+				</div>
+<!--				<div class="p-4">-->
+<!--					<NButton type="primary" size="large" round block @click="show = true">-->
+<!--						{{ $t('store.siderButton') }}-->
+<!--					</NButton>-->
+<!--				</div>-->
+			</main>
+		</div>
+<!--		<Footer />-->
+	</NLayoutSider>
+	<template v-if="isMobile">
+		<div v-show="!collapsed" class="fixed inset-0 z-40 bg-black/40" @click="handleUpdateCollapsed"/>
+	</template>
+	<PromptStore v-model:visible="show"/>
+
 </template>
+<style lang="less">
+.operate-slider {
+	background: linear-gradient(to bottom right, #FEFEFE, #E7F6FD);;
+}
+</style>

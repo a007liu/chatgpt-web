@@ -8,3 +8,32 @@ body {
 	padding-bottom: constant(safe-area-inset-bottom);
 	padding-bottom: env(safe-area-inset-bottom);
 }
+
+// 输入框没边框
+.input-no-border {
+	border-radius: 0;
+	border-bottom: 1px solid #eee;
+
+	.n-input__state-border {
+		display: none !important;
+	}
+
+	.n-input__border {
+		border: none !important;
+	}
+}
+
+// 抽屉
+.n-drawer {
+	border-radius: 8px 8px 0 0;
+}
+
+.n-button--primary-type {
+	&:hover, &:active {
+		background: #5D96FD !important;
+		color: #fff !important;
+		opacity: 0.9 !important;
+		border-color: #5D96FD !important;
+		--n-border-pressed: 1px solid #5D96FD!important;
+	}
+}
