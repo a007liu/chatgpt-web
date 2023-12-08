@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
-import { NButton, NInput, NDrawer, NSpace, useMessage } from 'naive-ui'
-import { t } from '@/locales'
+import { NButton, NInput, NDrawer, useMessage } from 'naive-ui'
 import { fetchUpdateChatRoomPrompt } from '@/api'
 import { useChatStore } from '@/store'
 
@@ -12,7 +11,6 @@ const chatStore = useChatStore()
 const currentChatHistory = computed(() => chatStore.getChatHistoryByCurrentActive)
 const ms = useMessage()
 const testing = ref(false)
-const title = `Prompt For [${currentChatHistory.value?.title}]`
 
 interface Props {
 	visible: boolean
