@@ -32,6 +32,7 @@ interface Props {
 
 interface Emit {
   (e: 'update:visible', visible: boolean): void
+  (e: 'success'): void
 }
 
 const active = ref('General')

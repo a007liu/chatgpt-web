@@ -4,6 +4,7 @@ import { NButton, NInput, NModal, NTabPane, NTabs, useMessage } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchLogin, fetchRegister, fetchResetPassword, fetchSendResetMail, fetchVerify, fetchVerifyAdmin } from '@/api'
 import { useAuthStore } from '@/store'
+import { getToken } from '@/store/modules/auth/helper'
 
 interface Props {
   visible: boolean
@@ -74,7 +75,8 @@ async function handleVerify(verifytoken: string) {
     loading.value = true
     const result = await fetchVerify(secretKey)
     ms.success(result.message as string)
-    router.replace('/')
+    if (!getToken())
+      await router.replace('/')
   }
   catch (error: any) {
     ms.error(error.message ?? 'error')
@@ -94,7 +96,8 @@ async function handleVerifyAdmin(verifytoken: string) {
     loading.value = true
     await fetchVerifyAdmin(secretKey)
     ms.success('开通成功 | Activate successfully')
-    router.replace('/')
+    if (!getToken())
+      await router.replace('/')
   }
   catch (error: any) {
     ms.error(error.message ?? 'error')

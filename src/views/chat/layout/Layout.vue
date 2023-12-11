@@ -5,12 +5,14 @@ import { useRouter } from 'vue-router'
 import Sider from './sider/index.vue'
 import { useBasicLayout } from '@/hooks/useBasicLayout'
 import { useAppStore, useChatStore } from '@/store'
+import { getToken } from '@/store/modules/auth/helper'
 
 const router = useRouter()
 const appStore = useAppStore()
 const chatStore = useChatStore()
 
-router.replace({ name: 'Chat', params: { uuid: chatStore.active } })
+if (getToken())
+  router.replace({ name: 'Chat', params: { uuid: chatStore.active } })
 
 const { isMobile } = useBasicLayout()
 

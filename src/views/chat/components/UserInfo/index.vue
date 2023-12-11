@@ -3,9 +3,14 @@ import { computed, ref } from 'vue'
 import { NButton, NDrawer, NInput, useMessage } from 'naive-ui'
 import { t } from '@/locales'
 import { useUserStore } from '@/store'
+import { useBasicLayout } from '@/hooks/useBasicLayout'
 
 const props = defineProps<Props>()
+
 const emit = defineEmits<Emit>()
+
+const { isMobile } = useBasicLayout()
+
 const userStore = useUserStore()
 
 const ms = useMessage()
@@ -20,6 +25,8 @@ interface Props {
 
 interface Emit {
   (e: 'update:visible', visible: boolean): void
+
+  (e: 'success'): void
 }
 
 const show = computed({
@@ -32,13 +39,14 @@ const show = computed({
 })
 
 const handleSaveUserInfo = async () => {
-  await userStore.updateUserInfo(true, userInfo.value)
+  await userStore.updateUserInfo(true, { name: name.value, avatar: avatar.value })
   ms.success(t('common.success'))
+  emit('success')
 }
 </script>
 
 <template>
-  <NDrawer v-model:show="show" height="600px" placement="bottom" :close-on-esc="false" :mask-closable="false">
+  <NDrawer v-model:show="show" :height="600" :default-width="isMobile ? '100%' : 600" :placement="isMobile ? 'bottom' : 'right'" :close-on-esc="false" :mask-closable="false">
     <div class="flex flex-col h-full">
       <P class="py-4 text-xl text-[#000] font-bold text-center">
         个人信息

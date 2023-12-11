@@ -159,11 +159,20 @@ async function handleGetKeys(page: number) {
 }
 
 async function handleUpdateApiKeyStatus(id: string, status: Status) {
-  dialog.warning({
-    title: t('chat.deleteKey'),
-    content: t('chat.deleteKeyConfirm'),
+  dialog.info({
+    content: () => {
+      return h(
+        'div', {
+          class: 'text-lg font-bold mb-10',
+          style: {},
+        }, '你确定要删除这个 key 吗?',
+      )
+    },
     positiveText: t('common.yes'),
     negativeText: t('common.no'),
+    style: { 'width': '70%', 'max-width': '400px' },
+    showIcon: false,
+    closable: false,
     onPositiveClick: async () => {
       await fetchUpdateApiKeyStatus(id, status)
       ms.info('OK')

@@ -128,6 +128,7 @@ const handleSelect = async (key: string) => {
         <SvgIcon
           v-if="userStore.userInfo.root"
           class="text-2xl text-[#5D96FD]"
+          :class="{ 'mr-4': !isMobile, 'text-4xl': !isMobile }"
           icon="ri:settings-4-line"
           @click="showSetting = true"
         />
@@ -160,8 +161,8 @@ const handleSelect = async (key: string) => {
       <span class="pl-1 font-bold text-ellipsis text-[#333]">{{ currentChatHistory?.title ?? '' }}</span>
     </p>
   </header>
-  <UserInfo v-if="showUserInfo" v-model:visible="showUserInfo" />
-  <Password v-if="showPassword" v-model:visible="showPassword" />
+  <UserInfo v-if="showUserInfo" v-model:visible="showUserInfo" @success="showUserInfo = false" />
+  <Password v-if="showPassword" v-model:visible="showPassword" @success="showPassword = false" />
   <Setting v-if="showSetting" v-model:visible="showSetting" />
 </template>
 

@@ -4,6 +4,7 @@ import { NButton, NDrawer, NInput, useMessage } from 'naive-ui'
 import { UserPassword } from '@/components/common/Setting/model'
 import { fetchUpdateUserPassword } from '@/api'
 import { t } from '@/locales'
+import { useBasicLayout } from '@/hooks/useBasicLayout'
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emit>()
@@ -14,8 +15,10 @@ interface Props {
 
 interface Emit {
   (e: 'update:visible', visible: boolean): void
+  (e: 'success'): void
 }
 
+const { isMobile } = useBasicLayout()
 const ms = useMessage()
 
 const saving = ref(false)
@@ -33,6 +36,7 @@ async function updatePassword() {
       throw new Error(t('setting.passwodSame'))
     await fetchUpdateUserPassword(config.value as UserPassword)
     ms.success(t('common.success'))
+    emit('success')
   }
   catch (error: any) {
     ms.error(error.message)
@@ -43,10 +47,6 @@ async function updatePassword() {
 onMounted(() => {
   config.value = new UserPassword()
 })
-
-interface Emit {
-  (e: 'update:visible', visible: boolean): void
-}
 
 const show = computed({
   get() {
@@ -59,7 +59,7 @@ const show = computed({
 </script>
 
 <template>
-  <NDrawer v-model:show="show" height="600px" placement="bottom" :close-on-esc="false" :mask-closable="false">
+  <NDrawer v-model:show="show" :height="600" :default-width="isMobile ? '100%' : 600" :placement="isMobile ? 'bottom' : 'right'" :close-on-esc="false" :mask-closable="false">
     <div class="flex flex-col h-full">
       <P class="py-4 text-xl text-[#000] font-bold text-center">
         个人信息

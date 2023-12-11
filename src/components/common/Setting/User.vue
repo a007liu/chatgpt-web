@@ -167,11 +167,20 @@ async function handleGetUsers(page: number) {
 
 async function handleUpdateUserStatus(userId: string, status: Status) {
   if (status === Status.Deleted) {
-    dialog.warning({
-      title: t('chat.deleteUser'),
-      content: t('chat.deleteUserConfirm'),
+    dialog.info({
+      content: () => {
+        return h(
+          'div', {
+            class: 'text-lg font-bold mb-10',
+            style: {},
+          }, '你确定要删除这个用户吗? 删除后这个邮箱永远无法注册登录。',
+        )
+      },
       positiveText: t('common.yes'),
       negativeText: t('common.no'),
+      style: { 'width': '70%', 'max-width': '400px' },
+      showIcon: false,
+      closable: false,
       onPositiveClick: async () => {
         await fetchUpdateUserStatus(userId, status)
         ms.info('OK')
@@ -187,11 +196,14 @@ async function handleUpdateUserStatus(userId: string, status: Status) {
 }
 
 async function handleDisable2FA(userId: string) {
-  dialog.warning({
+  dialog.info({
     title: t('chat.disable2FA'),
     content: t('chat.disable2FAConfirm'),
     positiveText: t('common.yes'),
     negativeText: t('common.no'),
+    style: { 'width': '70%', 'max-width': '400px' },
+    showIcon: false,
+    closable: false,
     onPositiveClick: async () => {
       const result = await fetchDisableUser2FAByAdmin(userId)
       ms.success(result.message as string)

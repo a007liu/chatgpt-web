@@ -448,11 +448,20 @@ function handleDelete(index: number) {
   if (loading.value)
     return
 
-  dialog.warning({
-    title: t('chat.deleteMessage'),
-    content: t('chat.deleteMessageConfirm'),
+  dialog.info({
+    content: () => {
+      return h(
+        'div', {
+          class: 'text-lg font-bold mb-10',
+          style: {},
+        }, '是否删除此消息?',
+      )
+    },
     positiveText: t('common.yes'),
     negativeText: t('common.no'),
+    style: { 'width': '70%', 'max-width': '400px' },
+    showIcon: false,
+    closable: false,
     onPositiveClick: () => {
       chatStore.deleteChatByUuid(+uuid, index)
     },
@@ -627,7 +636,7 @@ onMounted(async () => {
   const data = await authStore.getSession()
   if (String(data.auth) === 'false' && authStore.token) {
     await authStore.removeToken()
-    await router.replace({ name: 'Login' })
+    await router.replace({ path: '/login' })
   }
   else {
     if (getToken()) {
@@ -638,7 +647,7 @@ onMounted(async () => {
     }
     else {
       await authStore.removeToken()
-      await router.replace({ path: '/' })
+      await router.replace({ path: '/login' })
     }
   }
 })

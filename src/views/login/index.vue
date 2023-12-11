@@ -8,6 +8,7 @@ import { fetchLogin } from '@/api'
 import { useAuthStore } from '@/store'
 import { getToken } from '@/store/modules/auth/helper'
 import { useBasicLayout } from '@/hooks/useBasicLayout'
+import { ss } from '@/utils/storage'
 
 const { isMobile } = useBasicLayout()
 const router = useRouter()
@@ -40,7 +41,7 @@ async function handleLogin() {
     const result = await fetchLogin(name, pwd, token.value)
     await authStore.setToken(result.data.token)
     ms.success(result.message as string)
-    // await router.replace({ name: 'Chat' })
+    await router.replace({ name: 'Chat' })
     window.location.reload()
   }
   catch (error: any) {
@@ -63,6 +64,7 @@ function handlePress(event: KeyboardEvent) {
 onBeforeMount(async () => {
   if (getToken())
     await router.replace({ name: 'Chat' })
+  else ss.clear()
 
   pageLoading.value = false
 })
@@ -139,7 +141,7 @@ onBeforeMount(async () => {
 .login {
 	background: #fff;
 	background: url("../../assets/login-bg-c.png") no-repeat;
-	background-size: contain;
+	background-size: cover;
 
 	&.is-mobile {
 		background: url("../../assets/login-bg.png") no-repeat bottom left;

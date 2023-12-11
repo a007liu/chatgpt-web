@@ -6,8 +6,9 @@ import { useUserStore } from '@/store'
 import defaultAvatar from '@/assets/logo.png'
 import { isString } from '@/utils/is'
 import { SvgIcon } from '@/components/common'
+
 interface Props {
-  isUserName: boolean
+  isUserName?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -30,14 +31,22 @@ onMounted(async () => {
 <template>
   <div class="flex items-center justify-center cursor-pointer">
     <template v-if="isString(userInfo.avatar) && userInfo.avatar.length > 0">
-      <NAvatar round :src="userInfo.avatar" :fallback-src="defaultAvatar" />
+      <NAvatar
+        round
+        :src="userInfo.avatar"
+        :fallback-src="defaultAvatar"
+      />
     </template>
     <template v-else>
       <NAvatar round :src="defaultAvatar" />
     </template>
     <p v-if="props.isUserName" class="flex items-center ml-2 font-bold text-[#333]">
       {{ userInfo.name }}
-      <SvgIcon v-if="props.isUserName" class="text-lg text-[#5D96FD] ml-2" icon="teenyicons:down-solid" />
+      <SvgIcon
+        v-if="props.isUserName"
+        class="text-lg text-[#5D96FD] ml-2"
+        icon="teenyicons:down-solid"
+      />
     </p>
   </div>
 </template>
