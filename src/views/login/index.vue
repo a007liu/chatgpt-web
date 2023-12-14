@@ -72,7 +72,11 @@ onBeforeMount(async () => {
 
 <template>
   <div v-if="pageLoading" class="flex items-center justify-center w-full h-full">
-    <NSpin size="large" />
+		<NSpin size="large">
+			<template #description>
+				<span class="inline-block text-lg font-black mt-4">AI引擎加载中...</span>
+			</template>
+		</NSpin>
   </div>
   <div
     v-else
