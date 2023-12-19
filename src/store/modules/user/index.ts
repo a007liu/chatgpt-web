@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { fetchUpdateUserInfo } from '../../../api/'
+import { fetchUpdateUserInfo } from '@/api'
 import type { UserInfo, UserState } from './helper'
 import { defaultSetting, getLocalState, setLocalState } from './helper'
 

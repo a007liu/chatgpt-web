@@ -60,7 +60,7 @@ const options = [
     key: 'header',
     type: 'render',
     render: renderCustomHeader,
-    show: isMobile,
+    show: isMobile.value,
   },
   {
     label: '个人信息',

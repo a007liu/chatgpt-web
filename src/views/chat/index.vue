@@ -403,7 +403,7 @@ function handleExport() {
         'div', {
           class: 'text-lg font-bold mb-10',
           style: {},
-        }, '确定保存回话为图片？',
+        }, '确定保存会话记录为图片？',
       )
     },
     style: { 'width': '70%', 'max-width': '400px' },
@@ -478,7 +478,7 @@ function handleClear() {
         'div', {
           class: 'text-lg font-bold mb-10',
           style: {},
-        }, '确定删除会话？',
+        }, '确定删除会话记录？',
       )
     },
     positiveText: '确定',
