@@ -2,43 +2,39 @@ import express from 'express'
 import jwt from 'jsonwebtoken'
 import * as dotenv from 'dotenv'
 import { ObjectId } from 'mongodb'
-import { textTokens } from 'gpt-token'
 import speakeasy from 'speakeasy'
-import { type RequestProps, TwoFAConfig } from './types'
-import type { ChatMessage } from './chatgpt'
-import { abortChatProcess, chatConfig, chatReplyProcess, containsSensitiveWords, initAuditService } from './chatgpt'
+import { TwoFAConfig } from './types'
+import type { AuthJwtPayload } from './types'
+import { chatConfig, containsSensitiveWords, initAuditService } from './chatgpt'
 import { auth, getUserId } from './middleware/auth'
 import { clearApiKeyCache, clearConfigCache, getApiKeys, getCacheApiKeys, getCacheConfig, getOriginConfig } from './storage/config'
-import type { AuditConfig, ChatInfo, ChatOptions, Config, KeyConfig, MailConfig, SiteConfig, UserConfig, UserInfo } from './storage/model'
-import { Status, UsageResponse, UserRole } from './storage/model'
+import type { AnnounceConfig, AuditConfig, Config, GiftCard, KeyConfig, MailConfig, SiteConfig, UserConfig, UserInfo } from './storage/model'
+import { AdvancedConfig, Status, UserRole } from './storage/model'
 import {
-  clearChat,
   createChatRoom,
   createUser,
-  deleteAllChatRooms,
-  deleteChat,
   deleteChatRoom,
   disableUser2FA,
   existsChatRoom,
-  getChat,
-  getChatRoom,
+  getAmtByCardNo,
   getChatRooms,
-  getChats,
+  getChatRoomsCount,
   getUser,
   getUserById,
   getUserStatisticsByDay,
   getUsers,
-  insertChat,
-  insertChatUsage,
   renameChatRoom,
   updateApiKeyStatus,
-  updateChat,
   updateConfig,
+  updateGiftCard,
+  updateGiftCards,
   updateRoomChatModel,
   updateRoomPrompt,
   updateRoomUsingContext,
   updateUser,
   updateUser2FA,
+  updateUserAdvancedConfig,
+  updateUserAmount,
   updateUserChatModel,
   updateUserInfo,
   updateUserPassword,
@@ -47,11 +43,15 @@ import {
   upsertKey,
   verifyUser,
 } from './storage/mongo'
-import { authLimiter, limiter } from './middleware/limiter'
+import { authLimiter } from './middleware/limiter'
 import { hasAnyRole, isEmail, isNotEmptyString } from './utils/is'
 import { sendNoticeMail, sendResetPasswordMail, sendTestMail, sendVerifyMail, sendVerifyMailAdmin } from './utils/mail'
 import { checkUserResetPassword, checkUserVerify, checkUserVerifyAdmin, getUserResetPasswordUrl, getUserVerifyUrl, getUserVerifyUrlAdmin, md5 } from './utils/security'
-import { rootAuth } from './middleware/rootAuth'
+import { isAdmin, rootAuth } from './middleware/rootAuth'
+
+import { router as chatRouter } from './routes/chat'
+import { router as promptRouter } from './routes/prompt'
+import { router as uploadRouter } from './routes/upload'
 
 dotenv.config()
 
@@ -60,6 +60,8 @@ const router = express.Router()
 
 app.use(express.static('public'))
 app.use(express.json())
+
+app.use('/uploads', express.static('uploads'))
 
 app.all('*', (_, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
@@ -91,11 +93,48 @@ router.get('/chatrooms', auth, async (req, res) => {
   }
 })
 
+function formatTimestamp(timestamp: number) {
+  const date = new Date(timestamp)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
+
+router.get('/chatrooms-count', auth, async (req, res) => {
+  try {
+    const userId = req.query.userId as string
+    const page = +req.query.page
+    const size = +req.query.size
+    const rooms = await getChatRoomsCount(userId, page, size)
+    const result = []
+    rooms.data.forEach((r) => {
+      result.push({
+        uuid: r.roomId,
+        title: r.title,
+        userId: r.userId,
+        name: r.username,
+        lastTime: formatTimestamp(r.dateTime),
+        chatCount: r.chatCount,
+      })
+    })
+    res.send({ status: 'Success', message: null, data: { data: result, total: rooms.total } })
+  }
+  catch (error) {
+    console.error(error)
+    res.send({ status: 'Fail', message: 'Load error', data: [] })
+  }
+})
+
 router.post('/room-create', auth, async (req, res) => {
   try {
     const userId = req.headers.userId as string
-    const { title, roomId } = req.body as { title: string; roomId: number }
-    const room = await createChatRoom(userId, title, roomId)
+    const { title, roomId, chatModel } = req.body as { title: string; roomId: number; chatModel: string }
+    const room = await createChatRoom(userId, title, roomId, chatModel)
     res.send({ status: 'Success', message: null, data: room })
   }
   catch (error) {
@@ -108,8 +147,11 @@ router.post('/room-rename', auth, async (req, res) => {
   try {
     const userId = req.headers.userId as string
     const { title, roomId } = req.body as { title: string; roomId: number }
-    const room = await renameChatRoom(userId, title, roomId)
-    res.send({ status: 'Success', message: null, data: room })
+    const success = await renameChatRoom(userId, title, roomId)
+    if (success)
+      res.send({ status: 'Success', message: null, data: null })
+    else
+      res.send({ status: 'Fail', message: 'Saved Failed', data: null })
   }
   catch (error) {
     console.error(error)
@@ -170,328 +212,18 @@ router.post('/room-delete', auth, async (req, res) => {
     const userId = req.headers.userId as string
     const { roomId } = req.body as { roomId: number }
     if (!roomId || !await existsChatRoom(userId, roomId)) {
-      res.send({ status: 'Fail', message: 'Unknow room', data: null })
+      res.send({ status: 'Fail', message: 'Unknown room', data: null })
       return
     }
-    await deleteChatRoom(userId, roomId)
-    res.send({ status: 'Success', message: null })
+    const success = await deleteChatRoom(userId, roomId)
+    if (success)
+      res.send({ status: 'Success', message: null, data: null })
+    else
+      res.send({ status: 'Fail', message: 'Saved Failed', data: null })
   }
   catch (error) {
     console.error(error)
     res.send({ status: 'Fail', message: 'Delete error', data: null })
-  }
-})
-
-router.get('/chat-history', auth, async (req, res) => {
-  try {
-    const userId = req.headers.userId as string
-    const roomId = +req.query.roomId
-    const lastId = req.query.lastId as string
-    if (!roomId || !await existsChatRoom(userId, roomId)) {
-      res.send({ status: 'Success', message: null, data: [] })
-      // res.send({ status: 'Fail', message: 'Unknow room', data: null })
-      return
-    }
-    const chats = await getChats(roomId, !isNotEmptyString(lastId) ? null : parseInt(lastId))
-
-    const result = []
-    chats.forEach((c) => {
-      if (c.status !== Status.InversionDeleted) {
-        result.push({
-          uuid: c.uuid,
-          dateTime: new Date(c.dateTime).toLocaleString(),
-          text: c.prompt,
-          inversion: true,
-          error: false,
-          conversationOptions: null,
-          requestOptions: {
-            prompt: c.prompt,
-            options: null,
-          },
-        })
-      }
-      if (c.status !== Status.ResponseDeleted) {
-        const usage = c.options.completion_tokens
-          ? {
-              completion_tokens: c.options.completion_tokens || null,
-              prompt_tokens: c.options.prompt_tokens || null,
-              total_tokens: c.options.total_tokens || null,
-              estimated: c.options.estimated || null,
-            }
-          : undefined
-        result.push({
-          uuid: c.uuid,
-          dateTime: new Date(c.dateTime).toLocaleString(),
-          text: c.response,
-          inversion: false,
-          error: false,
-          loading: false,
-          responseCount: (c.previousResponse?.length ?? 0) + 1,
-          conversationOptions: {
-            parentMessageId: c.options.messageId,
-            conversationId: c.options.conversationId,
-          },
-          requestOptions: {
-            prompt: c.prompt,
-            parentMessageId: c.options.parentMessageId,
-            options: {
-              parentMessageId: c.options.messageId,
-              conversationId: c.options.conversationId,
-            },
-          },
-          usage,
-        })
-      }
-    })
-
-    res.send({ status: 'Success', message: null, data: result })
-  }
-  catch (error) {
-    console.error(error)
-    res.send({ status: 'Fail', message: 'Load error', data: null })
-  }
-})
-
-router.get('/chat-response-history', auth, async (req, res) => {
-  try {
-    const userId = req.headers.userId as string
-    const roomId = +req.query.roomId
-    const uuid = +req.query.uuid
-    const index = +req.query.index
-    if (!roomId || !await existsChatRoom(userId, roomId)) {
-      res.send({ status: 'Success', message: null, data: [] })
-      // res.send({ status: 'Fail', message: 'Unknow room', data: null })
-      return
-    }
-    const chat = await getChat(roomId, uuid)
-    if (chat.previousResponse === undefined || chat.previousResponse.length < index) {
-      res.send({ status: 'Fail', message: 'Error', data: [] })
-      return
-    }
-    const response = index >= chat.previousResponse.length
-      ? chat
-      : chat.previousResponse[index]
-    const usage = response.options.completion_tokens
-      ? {
-          completion_tokens: response.options.completion_tokens || null,
-          prompt_tokens: response.options.prompt_tokens || null,
-          total_tokens: response.options.total_tokens || null,
-          estimated: response.options.estimated || null,
-        }
-      : undefined
-    res.send({
-      status: 'Success',
-      message: null,
-      data: {
-        uuid: chat.uuid,
-        dateTime: new Date(chat.dateTime).toLocaleString(),
-        text: response.response,
-        inversion: false,
-        error: false,
-        loading: false,
-        responseCount: (chat.previousResponse?.length ?? 0) + 1,
-        conversationOptions: {
-          parentMessageId: response.options.messageId,
-          conversationId: response.options.conversationId,
-        },
-        requestOptions: {
-          prompt: chat.prompt,
-          parentMessageId: response.options.parentMessageId,
-          options: {
-            parentMessageId: response.options.messageId,
-            conversationId: response.options.conversationId,
-          },
-        },
-        usage,
-      },
-    })
-  }
-  catch (error) {
-    console.error(error)
-    res.send({ status: 'Fail', message: 'Load error', data: null })
-  }
-})
-
-router.post('/chat-delete', auth, async (req, res) => {
-  try {
-    const userId = req.headers.userId as string
-    const { roomId, uuid, inversion } = req.body as { roomId: number; uuid: number; inversion: boolean }
-    if (!roomId || !await existsChatRoom(userId, roomId)) {
-      res.send({ status: 'Fail', message: 'Unknow room', data: null })
-      return
-    }
-    await deleteChat(roomId, uuid, inversion)
-    res.send({ status: 'Success', message: null, data: null })
-  }
-  catch (error) {
-    console.error(error)
-    res.send({ status: 'Fail', message: 'Delete error', data: null })
-  }
-})
-
-router.post('/chat-clear-all', auth, async (req, res) => {
-  try {
-    const userId = req.headers.userId as string
-    await deleteAllChatRooms(userId)
-    res.send({ status: 'Success', message: null, data: null })
-  }
-  catch (error) {
-    console.error(error)
-    res.send({ status: 'Fail', message: 'Delete error', data: null })
-  }
-})
-
-router.post('/chat-clear', auth, async (req, res) => {
-  try {
-    const userId = req.headers.userId as string
-    const { roomId } = req.body as { roomId: number }
-    if (!roomId || !await existsChatRoom(userId, roomId)) {
-      res.send({ status: 'Fail', message: 'Unknow room', data: null })
-      return
-    }
-    await clearChat(roomId)
-    res.send({ status: 'Success', message: null, data: null })
-  }
-  catch (error) {
-    console.error(error)
-    res.send({ status: 'Fail', message: 'Delete error', data: null })
-  }
-})
-
-router.post('/chat-process', [auth, limiter], async (req, res) => {
-  res.setHeader('Content-type', 'application/octet-stream')
-
-  let { roomId, uuid, regenerate, prompt, options = {}, systemMessage, temperature, top_p } = req.body as RequestProps
-  const userId = req.headers.userId as string
-  const room = await getChatRoom(userId, roomId)
-  if (room == null)
-    global.console.error(`Unable to get chat room \t ${userId}\t ${roomId}`)
-  if (room != null && isNotEmptyString(room.prompt))
-    systemMessage = room.prompt
-  let lastResponse
-  let result
-  let message: ChatInfo
-  try {
-    const config = await getCacheConfig()
-    const userId = req.headers.userId.toString()
-    const user = await getUserById(userId)
-    if (config.auditConfig.enabled || config.auditConfig.customizeEnabled) {
-      if (!user.roles.includes(UserRole.Admin) && await containsSensitiveWords(config.auditConfig, prompt)) {
-        res.send({ status: 'Fail', message: '含有敏感词 | Contains sensitive words', data: null })
-        return
-      }
-    }
-
-    message = regenerate
-      ? await getChat(roomId, uuid)
-      : await insertChat(uuid, prompt, roomId, options as ChatOptions)
-    let firstChunk = true
-    result = await chatReplyProcess({
-      message: prompt,
-      lastContext: options,
-      process: (chat: ChatMessage) => {
-        lastResponse = chat
-        const chuck = {
-          id: chat.id,
-          conversationId: chat.conversationId,
-          text: chat.text,
-          detail: {
-            choices: [
-              {
-                finish_reason: undefined,
-              },
-            ],
-          },
-        }
-        if (chat.detail && chat.detail.choices.length > 0)
-          chuck.detail.choices[0].finish_reason = chat.detail.choices[0].finish_reason
-
-        res.write(firstChunk ? JSON.stringify(chuck) : `\n${JSON.stringify(chuck)}`)
-        firstChunk = false
-      },
-      systemMessage,
-      temperature,
-      top_p,
-      user,
-      messageId: message._id.toString(),
-      tryCount: 0,
-      room,
-    })
-    // return the whole response including usage
-    if (!result.data.detail?.usage) {
-      if (!result.data.detail)
-        result.data.detail = {}
-      result.data.detail.usage = new UsageResponse()
-      // 因为 token 本身不计算, 所以这里默认以 gpt 3.5 的算做一个伪统计
-      result.data.detail.usage.prompt_tokens = textTokens(prompt, 'gpt-3.5-turbo')
-      result.data.detail.usage.completion_tokens = textTokens(result.data.text, 'gpt-3.5-turbo')
-      result.data.detail.usage.total_tokens = result.data.detail.usage.prompt_tokens + result.data.detail.usage.completion_tokens
-      result.data.detail.usage.estimated = true
-    }
-    res.write(`\n${JSON.stringify(result.data)}`)
-  }
-  catch (error) {
-    res.write(JSON.stringify({ message: error?.message }))
-  }
-  finally {
-    res.end()
-    try {
-      if (result == null || result === undefined || result.status !== 'Success') {
-        if (result && result.status !== 'Success')
-          lastResponse = { text: result.message }
-        result = { data: lastResponse }
-      }
-
-      if (result.data === undefined)
-        // eslint-disable-next-line no-unsafe-finally
-        return
-
-      if (regenerate && message.options.messageId) {
-        const previousResponse = message.previousResponse || []
-        previousResponse.push({ response: message.response, options: message.options })
-        await updateChat(message._id as unknown as string,
-          result.data.text,
-          result.data.id,
-          result.data.conversationId,
-          result.data.detail?.usage as UsageResponse,
-          previousResponse as [])
-      }
-      else {
-        await updateChat(message._id as unknown as string,
-          result.data.text,
-          result.data.id,
-          result.data.conversationId,
-          result.data.detail?.usage as UsageResponse)
-      }
-
-      if (result.data.detail?.usage) {
-        await insertChatUsage(new ObjectId(req.headers.userId),
-          roomId,
-          message._id,
-          result.data.id,
-          result.data.detail?.usage as UsageResponse)
-      }
-    }
-    catch (error) {
-      global.console.error(error)
-    }
-  }
-})
-
-router.post('/chat-abort', [auth, limiter], async (req, res) => {
-  try {
-    const userId = req.headers.userId.toString()
-    const { text, messageId, conversationId } = req.body as { text: string; messageId: string; conversationId: string }
-    const msgId = await abortChatProcess(userId)
-    await updateChat(msgId,
-      text,
-      messageId,
-      conversationId,
-      null)
-    res.send({ status: 'Success', message: 'OK', data: null })
-  }
-  catch (error) {
-    res.send({ status: 'Fail', message: '重置邮件已发送 | Reset email has been sent', data: null })
   }
 })
 
@@ -553,9 +285,7 @@ router.post('/user-register', authLimiter, async (req, res) => {
 router.post('/config', rootAuth, async (req, res) => {
   try {
     const userId = req.headers.userId.toString()
-
-    const user = await getUserById(userId)
-    if (user == null || user.status !== Status.Normal || !user.roles.includes(UserRole.Admin))
+    if (!isAdmin(userId))
       throw new Error('无权限 | No permission.')
 
     const response = await chatConfig()
@@ -569,8 +299,9 @@ router.post('/config', rootAuth, async (req, res) => {
 router.post('/session', async (req, res) => {
   try {
     const config = await getCacheConfig()
-    const hasAuth = config.siteConfig.loginEnabled
-    const allowRegister = (await getCacheConfig()).siteConfig.registerEnabled
+    const hasAuth = config.siteConfig.loginEnabled || config.siteConfig.authProxyEnabled
+    const authProxyEnabled = config.siteConfig.authProxyEnabled
+    const allowRegister = config.siteConfig.registerEnabled
     if (config.apiModel !== 'ChatGPTAPI' && config.apiModel !== 'ChatGPTUnofficialProxyAPI')
       config.apiModel = 'ChatGPTAPI'
     const userId = await getUserId(req)
@@ -591,9 +322,27 @@ router.post('/session', async (req, res) => {
       }
     })
 
-    let userInfo: { name: string; description: string; avatar: string; userId: string; root: boolean; roles: UserRole[]; config: UserConfig }
+    let userInfo: { name: string; description: string; avatar: string; userId: string; root: boolean; roles: UserRole[]; config: UserConfig; advanced: AdvancedConfig }
     if (userId != null) {
       const user = await getUserById(userId)
+      if (user === null) {
+        globalThis.console.error(`session userId ${userId} but query user is null.`)
+        res.send({
+          status: 'Success',
+          message: '',
+          data: {
+            auth: hasAuth,
+            allowRegister,
+            model: config.apiModel,
+            title: config.siteConfig.siteTitle,
+            chatModels,
+            allChatModels: chatModelOptions,
+            showWatermark: config.siteConfig?.showWatermark,
+          },
+        })
+        return
+      }
+
       userInfo = {
         name: user.name,
         description: user.description,
@@ -602,6 +351,7 @@ router.post('/session', async (req, res) => {
         root: user.roles.includes(UserRole.Admin),
         roles: user.roles,
         config: user.config,
+        advanced: user.advanced,
       }
 
       const keys = (await getCacheApiKeys()).filter(d => hasAnyRole(d.userRoles, user.roles))
@@ -629,6 +379,24 @@ router.post('/session', async (req, res) => {
           value: c.key,
         })
       })
+
+      res.send({
+        status: 'Success',
+        message: '',
+        data: {
+          auth: hasAuth,
+          authProxyEnabled,
+          allowRegister,
+          model: config.apiModel,
+          title: config.siteConfig.siteTitle,
+          chatModels,
+          allChatModels: chatModelOptions,
+          usageCountLimit: config.siteConfig?.usageCountLimit,
+          showWatermark: config.siteConfig?.showWatermark,
+          userInfo,
+        },
+      })
+      return
     }
 
     res.send({
@@ -636,11 +404,13 @@ router.post('/session', async (req, res) => {
       message: '',
       data: {
         auth: hasAuth,
+        authProxyEnabled,
         allowRegister,
         model: config.apiModel,
         title: config.siteConfig.siteTitle,
-        chatModels,
+        chatModels: chatModelOptions, // if userId is null which means in nologin mode, open all model options, otherwise user can only choose gpt-3.5-turbo
         allChatModels: chatModelOptions,
+        showWatermark: config.siteConfig?.showWatermark,
         userInfo,
       },
     })
@@ -686,15 +456,19 @@ router.post('/user-login', authLimiter, async (req, res) => {
       name: user.name ? user.name : user.email,
       avatar: user.avatar,
       description: user.description,
-      userId: user._id,
+      userId: user._id.toString(),
       root: user.roles.includes(UserRole.Admin),
       config: user.config,
-    }, config.siteConfig.loginSalt.trim())
+    } as AuthJwtPayload, config.siteConfig.loginSalt.trim())
     res.send({ status: 'Success', message: '登录成功 | Login successfully', data: { token: jwtToken } })
   }
   catch (error) {
     res.send({ status: 'Fail', message: error.message, data: null })
   }
+})
+
+router.post('/user-logout', async (req, res) => {
+  res.send({ status: 'Success', message: '退出登录成功 | Logout successful', data: null })
 })
 
 router.post('/user-send-reset-mail', authLimiter, async (req, res) => {
@@ -750,6 +524,79 @@ router.post('/user-info', auth, async (req, res) => {
   }
 })
 
+// 使用兑换码后更新用户用量
+router.post('/user-updateamtinfo', auth, async (req, res) => {
+  try {
+    const { useAmount } = req.body as { useAmount: number }
+    const userId = req.headers.userId.toString()
+
+    const user = await getUserById(userId)
+    if (user == null || user.status !== Status.Normal)
+      throw new Error('用户不存在 | User does not exist.')
+    await updateUserAmount(userId, useAmount)
+    res.send({ status: 'Success', message: '更新用量成功 | Update Amount successfully' })
+  }
+  catch (error) {
+    res.send({ status: 'Fail', message: error.message, data: null })
+  }
+})
+
+// 获取用户对话额度
+router.get('/user-getamtinfo', auth, async (req, res) => {
+  try {
+    const userId = req.headers.userId as string
+    const user = await getUserById(userId)
+    const data = {
+      amount: user.useAmount,
+      limit: user.limit_switch,
+    }
+    res.send({ status: 'Success', message: null, data })
+  }
+  catch (error) {
+    console.error(error)
+    res.send({ status: 'Fail', message: 'Read Amount Error', data: 0 })
+  }
+})
+
+// 兑换对话额度
+router.post('/redeem-card', auth, async (req, res) => {
+  try {
+    const { redeemCardNo } = req.body as { redeemCardNo: string }
+    const userId = req.headers.userId.toString()
+    const user = await getUserById(userId)
+
+    if (user == null || user.status !== Status.Normal)
+      throw new Error('用户不存在 | User does not exist.')
+
+    const amt_isused = await getAmtByCardNo(redeemCardNo)
+    if (amt_isused) {
+      if (amt_isused.redeemed === 1)
+        throw new Error('该兑换码已被使用过 | RedeemCode been redeemed.')
+      await updateGiftCard(redeemCardNo, userId)
+      const data = amt_isused.amount
+      res.send({ status: 'Success', message: '兑换成功 | Redeem successfully', data })
+    }
+    else {
+      throw new Error('该兑换码无效，请检查是否输错 | RedeemCode not exist or Misspelled.')
+    }
+  }
+  catch (error) {
+    res.send({ status: 'Fail', message: error.message, data: null })
+  }
+})
+
+// update giftcard database
+router.post('/giftcard-update', rootAuth, async (req, res) => {
+  try {
+    const { data, overRideSwitch } = req.body as { data: GiftCard[];overRideSwitch: boolean }
+    await updateGiftCards(data, overRideSwitch)
+    res.send({ status: 'Success', message: '更新成功 | Update successfully' })
+  }
+  catch (error) {
+    res.send({ status: 'Fail', message: error.message, data: null })
+  }
+})
+
 router.post('/user-chat-model', auth, async (req, res) => {
   try {
     const { chatModel } = req.body as { chatModel: string }
@@ -792,15 +639,16 @@ router.post('/user-status', rootAuth, async (req, res) => {
   }
 })
 
+// 函数中加入useAmount limit_switch
 router.post('/user-edit', rootAuth, async (req, res) => {
   try {
-    const { userId, email, password, roles, remark } = req.body as { userId?: string; email: string; password: string; roles: UserRole[]; remark?: string }
+    const { userId, email, password, roles, remark, useAmount, limit_switch } = req.body as { userId?: string; email: string; password: string; roles: UserRole[]; remark?: string; useAmount?: number; limit_switch?: boolean }
     if (userId) {
-      await updateUser(userId, roles, password, remark)
+      await updateUser(userId, roles, password, remark, Number(useAmount), limit_switch)
     }
     else {
       const newPassword = md5(password)
-      const user = await createUser(email, newPassword, roles, remark)
+      const user = await createUser(email, newPassword, roles, null, remark, Number(useAmount), limit_switch)
       await updateUserStatus(user._id.toString(), Status.Normal)
     }
     res.send({ status: 'Success', message: '更新成功 | Update successfully' })
@@ -1036,6 +884,30 @@ router.post('/mail-test', rootAuth, async (req, res) => {
   }
 })
 
+router.post('/setting-announce', rootAuth, async (req, res) => {
+  try {
+    const config = req.body as AnnounceConfig
+    const thisConfig = await getOriginConfig()
+    thisConfig.announceConfig = config
+    const result = await updateConfig(thisConfig)
+    clearConfigCache()
+    res.send({ status: 'Success', message: '操作成功 | Successfully', data: result.announceConfig })
+  }
+  catch (error) {
+    res.send({ status: 'Fail', message: error.message, data: null })
+  }
+})
+
+router.post('/announcement', async (req, res) => {
+  try {
+    const result = await getCacheConfig()
+    res.send({ status: 'Success', message: '操作成功 | Successfully', data: result.announceConfig })
+  }
+  catch (error) {
+    res.send({ status: 'Fail', message: error.message, data: null })
+  }
+})
+
 router.post('/setting-audit', rootAuth, async (req, res) => {
   try {
     const config = req.body as AuditConfig
@@ -1063,6 +935,55 @@ router.post('/audit-test', rootAuth, async (req, res) => {
     if (audit.enabled)
       initAuditService(config.auditConfig)
     res.send({ status: 'Success', message: result ? '含敏感词 | Contains sensitive words' : '不含敏感词 | Does not contain sensitive words.', data: null })
+  }
+  catch (error) {
+    res.send({ status: 'Fail', message: error.message, data: null })
+  }
+})
+
+router.post('/setting-advanced', auth, async (req, res) => {
+  try {
+    const config = req.body as {
+      systemMessage: string
+      temperature: number
+      top_p: number
+      maxContextCount: number
+      sync: boolean
+    }
+    if (config.sync) {
+      if (!isAdmin(req.headers.userId as string)) {
+        res.send({ status: 'Fail', message: '无权限 | No permission', data: null })
+        return
+      }
+      const thisConfig = await getOriginConfig()
+      thisConfig.advancedConfig = new AdvancedConfig(
+        config.systemMessage,
+        config.temperature,
+        config.top_p,
+        config.maxContextCount,
+      )
+      await updateConfig(thisConfig)
+      clearConfigCache()
+    }
+    const userId = req.headers.userId.toString()
+    await updateUserAdvancedConfig(userId, new AdvancedConfig(
+      config.systemMessage,
+      config.temperature,
+      config.top_p,
+      config.maxContextCount,
+    ))
+    res.send({ status: 'Success', message: '操作成功 | Successfully' })
+  }
+  catch (error) {
+    res.send({ status: 'Fail', message: error.message, data: null })
+  }
+})
+
+router.post('/setting-reset-advanced', auth, async (req, res) => {
+  try {
+    const userId = req.headers.userId.toString()
+    await updateUserAdvancedConfig(userId, null)
+    res.send({ status: 'Success', message: '操作成功 | Successfully' })
   }
   catch (error) {
     res.send({ status: 'Fail', message: error.message, data: null })
@@ -1107,8 +1028,11 @@ router.post('/setting-key-upsert', rootAuth, async (req, res) => {
 
 router.post('/statistics/by-day', auth, async (req, res) => {
   try {
-    const userId = req.headers.userId
-    const { start, end } = req.body as { start: number; end: number }
+    let { userId, start, end } = req.body as { userId?: string; start: number; end: number }
+    if (!userId)
+      userId = req.headers.userId as string
+    else if (!isAdmin(req.headers.userId as string))
+      throw new Error('无权限 | No permission')
 
     const data = await getUserStatisticsByDay(new ObjectId(userId as string), start, end)
     res.send({ status: 'Success', message: '', data })
@@ -1117,6 +1041,15 @@ router.post('/statistics/by-day', auth, async (req, res) => {
     res.send(error)
   }
 })
+
+app.use('', chatRouter)
+app.use('/api', chatRouter)
+
+app.use('', promptRouter)
+app.use('/api', promptRouter)
+
+app.use('', uploadRouter)
+app.use('/api', uploadRouter)
 
 app.use('', router)
 app.use('/api', router)
