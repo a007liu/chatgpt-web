@@ -1,6 +1,15 @@
 import type { AxiosProgressEvent, GenericAbortSignal } from 'axios'
 import { get, post } from '@/utils/request'
-import type { AuditConfig, ConfigState, KeyConfig, MailConfig, SiteConfig, Status, UserInfo, UserPassword } from '@/components/common/Setting/model'
+import type {
+  AuditConfig,
+  ConfigState,
+  KeyConfig,
+  MailConfig,
+  SiteConfig,
+  Status,
+  UserInfo,
+  UserPassword,
+} from '@/components/common/Setting/model'
 import { useAuthStore, useSettingStore } from '@/store'
 
 export function fetchChatConfig<T = any>() {
@@ -15,9 +24,11 @@ export function fetchChatAPIProcess<T = any>(
     uuid: number
     regenerate?: boolean
     prompt: string
+    uploadFileKeys?: string[]
     options?: { conversationId?: string; parentMessageId?: string }
     signal?: GenericAbortSignal
-    onDownloadProgress?: (progressEvent: AxiosProgressEvent) => void },
+    onDownloadProgress?: (progressEvent: AxiosProgressEvent) => void
+  },
 ) {
   const settingStore = useSettingStore()
   const authStore = useAuthStore()
@@ -27,6 +38,7 @@ export function fetchChatAPIProcess<T = any>(
     uuid: params.uuid,
     regenerate: params.regenerate || false,
     prompt: params.prompt,
+    uploadFileKeys: params.uploadFileKeys,
     options: params.options,
   }
 
@@ -167,7 +179,13 @@ export function fetchUpdateUserStatus<T = any>(userId: string, status: Status) {
 export function fetchUpdateUser<T = any>(userInfo: UserInfo) {
   return post<T>({
     url: '/user-edit',
-    data: { userId: userInfo._id, roles: userInfo.roles, email: userInfo.email, password: userInfo.password, remark: userInfo.remark },
+    data: {
+      userId: userInfo._id,
+      roles: userInfo.roles,
+      email: userInfo.email,
+      password: userInfo.password,
+      remark: userInfo.remark,
+    },
   })
 }
 
@@ -184,10 +202,10 @@ export function fetchGetChatRooms<T = any>() {
   })
 }
 
-export function fetchCreateChatRoom<T = any>(title: string, roomId: number) {
+export function fetchCreateChatRoom<T = any>(title: string, roomId: number, chatModel?: string) {
   return post<T>({
     url: '/room-create',
-    data: { title, roomId },
+    data: { title, roomId, chatModel },
   })
 }
 
@@ -202,6 +220,13 @@ export function fetchUpdateChatRoomPrompt<T = any>(prompt: string, roomId: numbe
   return post<T>({
     url: '/room-prompt',
     data: { prompt, roomId },
+  })
+}
+
+export function fetchUpdateChatRoomChatModel<T = any>(chatModel: string, roomId: number) {
+  return post<T>({
+    url: '/room-chatmodel',
+    data: { chatModel, roomId },
   })
 }
 
@@ -228,7 +253,7 @@ export function fetchGetChatHistory<T = any>(roomId: number, lastId?: number) {
 export function fetchClearAllChat<T = any>() {
   return post<T>({
     url: '/chat-clear-all',
-    data: { },
+    data: {},
   })
 }
 
