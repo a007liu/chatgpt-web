@@ -115,7 +115,7 @@ const show = computed({
       </P>
       <NForm
         ref="formRef"
-        class="px-4"
+        class="px-4 flex-1"
         label-placement="top"
         require-mark-placement="left"
         :label-width="80"
@@ -146,28 +146,28 @@ const show = computed({
           />
         </NFormItem>
       </NForm>
-    </div>
-    <div class="flex-1 flex items-end px-4 pb-4">
-      <div class="flex-1 mr-2">
-        <NButton
-          type="primary"
-          size="large"
-          color="#E9F0FD"
-          text-color="#5D96FD"
-          block
-          round
-          @click="show = false"
-        >
-          取消
-        </NButton>
-      </div>
-      <div class="flex-1 ml-2">
-        <NButton
-          :loading="saving"
-          type="primary" size="large" block round @click="updatePassword"
-        >
-          保存
-        </NButton>
+      <div class="flex items-end px-4 pb-4 flex-grow-0">
+        <div class="flex-1 mr-2">
+          <NButton
+            type="primary"
+            size="large"
+            color="#E9F0FD"
+            text-color="#5D96FD"
+            block
+            round
+            @click="show = false"
+          >
+            取消
+          </NButton>
+        </div>
+        <div class="flex-1 ml-2">
+          <NButton
+            :loading="saving"
+            type="primary" size="large" block round @click="updatePassword"
+          >
+            保存
+          </NButton>
+        </div>
       </div>
     </div>
   </NDrawer>
