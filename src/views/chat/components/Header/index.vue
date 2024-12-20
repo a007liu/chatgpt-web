@@ -33,7 +33,7 @@ const showSetting = ref(false)
 
 const currentChatHistory = computed(() => chatStore.getChatHistoryByCurrentActive)
 
-const renderIcon = (icon: string) => {
+function renderIcon(icon: string) {
   return () => {
     return h(SvgIcon, {
       icon,
@@ -42,7 +42,7 @@ const renderIcon = (icon: string) => {
   }
 }
 
-const renderCustomHeader = () => {
+function renderCustomHeader() {
   return h(
     'div',
     { style: 'display: flex; align-items: center; padding: 8px 12px;' },
@@ -86,7 +86,7 @@ function handleUpdateCollapsed() {
 }
 
 // 选择
-const handleSelect = async (key: string) => {
+async function handleSelect(key: string) {
   if (key === 'userInfo') {
     showUserInfo.value = true
   }
@@ -158,7 +158,7 @@ const handleSelect = async (key: string) => {
         class="text-2xl text-[#5D96FD]"
         icon="fluent:chat-20-filled"
       />
-      <span class="pl-1 font-bold text-ellipsis text-[#333]">{{ currentChatHistory?.title ?? '' }}</span>
+      <span class="px-5 font-bold truncate text-[#333]">{{ currentChatHistory?.title ?? '' }}</span>
     </p>
   </header>
   <UserInfo v-if="showUserInfo" v-model:visible="showUserInfo" @success="showUserInfo = false" />
